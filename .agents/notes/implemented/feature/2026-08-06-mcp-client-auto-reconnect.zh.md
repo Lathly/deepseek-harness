@@ -12,7 +12,7 @@ Status: implemented
 
 `packages/mcp/mcp-client/src/connection.ts` 拥有一个逐实例的连接监督器；`apply()` 收缩为配置解析加两个副作用（`serverName` 预留和监督器的生命周期）。监督器负责管理 client/transport 代、活跃的工具注册以及重连循环。
 
-**触发条件。** 监督器在每一代上挂载 `client.onclose`。SDK 在 stdio 子进程退出时触发该回调，因此崩溃无需轮询即可感知。`StreamableHTTPClientTransport` 仅在主动关闭时触发 `onclose`——它内部拥有自己的 SSE（Server-Sent Events）流恢复机制，并将请求失败以逐调用方式暴露——因此 HTTP 服务器实际上不在监督器的重启范围内；包 README 记录了该限制。
+**触发条件。** 监督器在每一代上挂载 `client.onclose`。SDK 在 stdio 子进程退出时触发该回调，因此崩溃无需轮询即可感知。streamable-http 连接的终结方式相同：transport 在任何关闭时都会触发 `onclose`，此外工具执行器还会把调用中途发生的网络级失败上报给监督器（该上报由[传输失败再生](2026-09-02-mcp-client-transport-failure-regeneration.zh.md)笔记负责），因此 HTTP 行在工具调用内部断开时会经由同一循环再生，而不是陷入卡死。
 
 **代隔离，无交错。** 每次尝试构建一个全新的 transport 和 `Client`（SDK 将一个 Protocol 绑定到一个 transport 上终身使用）。每个监督器内部有一个队列将所有 `syncTools` 调用串行化——跨所有代的初始同步和 `list_changed` 再同步——`isCurrent` 栅栏使过时的代变为惰性，从而确保不会有两次同步交错执行 dispose 上一代/注册下一代的切换（否则会对同一代执行两次 dispose 并泄漏另一代）。该队列还消除了一个先前存在的竞态：两次快速的 `list_changed` 通知同时触发重新同步。严格启动注册由激活尝试本身显式拥有，而非由首个入队者拥有；提前到达的 `list_changed` 采用故障隔离的再同步语义，不能消费 `failOnStartupError`。失败信号按代幂等：一次连接拒绝与其自身 transport 关闭竞态时，仅调度恰好一次重试。失败尝试只有在 `Client.close()` 结算且 transport 报告 `onclose` 后才能进入退避；对 stdio 而言，`onclose` 证明子进程已退出；若关闭信号始终未到，则在 SDK 的有界终止窗口结束后停止重连，而不是允许两个服务器进程重叠运行。dispose 使用同一个有界关闭信号屏障；若关停未完成则予以报告，且绝不重启。
 
@@ -32,7 +32,7 @@ Status: implemented
 
 **断连时立即注销工具，恢复时重新注册。** 否决：短暂故障会使模型可见工具列表抖动（每次崩溃触发两次 schema 前缀失效），而无任何信息增益；失败的调用已足以标示故障，恢复时的切换按代原子执行。工具仅在最终失败时注销，确保永久死亡的服务器不会泄漏永久失效的工具。
 
-**将 Streamable HTTP 请求失败路由到监督器。**不予采纳：HTTP 传输已使用自己的退避机制重连 SSE 流，逐请求错误并不意味着服务器已死，且 harness 没有可重新拉起的子进程。transport 关闭仍是唯一触发条件。
+**将 Streamable HTTP 请求失败路由到监督器。**当时不予采纳：HTTP 传输已使用自己的退避机制重连 SSE 流，逐请求错误并不意味着服务器已死，且 harness 没有可重新拉起的子进程。transport 关闭一直是唯一触发条件，直到静默的 socket 切断使已建立的连接陷入卡死——此后由[传输失败再生](2026-09-02-mcp-client-transport-failure-regeneration.zh.md)笔记采纳该方向，并将其限定为网络级失败。
 
 **通过 Loader/HMR 机制重启，而非使用插件内监督器。** 否决：Loader 负责配置驱动的重组合，而非运行时健康管理。插件通过 Loader 重启自身会混淆配置代与连接代，并丢失逐故障预算。
 

@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
+import { ListToolsResultSchema, McpError } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import type { Context } from '@deepseek-ai/cordis'
 import { isImageAdmissionError } from '@deepseek-ai/dsh-attachment'
@@ -32,6 +32,12 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /**
+   * Report a transport-level tool-call failure (a connection broken mid-call)
+   * so the supervisor can regenerate the connection. Protocol-level server
+   * responses and aborted calls are not reported.
+   */
+  onTransportFailure?: (error: unknown) => void
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -78,21 +84,49 @@ function listToolsUncached(client: Client, cursor?: string) {
 }
 
 /** Call without the SDK pre-validating an output schema the bridge may not support. */
-function callToolUncached(
+async function callToolUncached(
   client: Client,
   rawName: string,
   args: Record<string, unknown>,
   exec: ToolExecution,
   opts: ToolBridgeOptions,
 ) {
-  return client.request(
-    { method: 'tools/call', params: { name: rawName, arguments: args } },
-    RawCallToolResultSchema,
-    {
-      signal: exec.signal,
-      timeout: opts.toolCallTimeoutMs,
-    },
-  )
+  try {
+    return await client.request(
+      { method: 'tools/call', params: { name: rawName, arguments: args } },
+      RawCallToolResultSchema,
+      {
+        signal: exec.signal,
+        timeout: opts.toolCallTimeoutMs,
+      },
+    )
+  } catch (error) {
+    // A broken connection must regenerate; an aborted call or a
+    // protocol-level server response must not.
+    if (!exec.signal.aborted && isTransportFailure(error)) opts.onTransportFailure?.(error)
+    throw error
+  }
+}
+
+/**
+ * Whether a failed tool call signals a connection broken mid-call. undici
+ * wraps network failures as a `TypeError: fetch failed` whose cause chain
+ * carries the socket or timeout error (`ECONN*`, `ENET*`, `UND_ERR*`); a
+ * protocol-level response (McpError) or any other rejection does not.
+ *
+ * @param error - The rejection of the failed `tools/call` request.
+ * @returns True when the connection itself is broken.
+ */
+export function isTransportFailure(error: unknown): boolean {
+  if (error instanceof McpError) return false
+  let current: unknown = error
+  while (current instanceof Error) {
+    if (current.name === 'TypeError' && current.message === 'fetch failed') return true
+    const code = (current.cause as { code?: unknown } | undefined)?.code
+    if (typeof code === 'string' && /^(UND_ERR|ECONN|ENET|EHOST|EPIPE|ETIMEDOUT)/.test(code)) return true
+    current = current.cause
+  }
+  return false
 }
 
 /**
@@ -294,9 +328,10 @@ function createOutput(rawName: string, structuredSchema: JsonSchemaNode | undefi
 /**
  * Create an execute function for one MCP tool. The executor closes over the
  * raw MCP tool name and sends an uncached `tools/call` request with it (never
- * the public name), with abort signal and timeout, then maps the result to
- * harness ContentBlocks. Owning the raw request prevents the SDK's internal
- * per-page schema cache from pre-validating a different contract.
+ * the public name), with abort signal and timeout, reports a transport-level
+ * failure to the bridge options so the connection regenerates, then maps the
+ * result to harness ContentBlocks. Owning the raw request prevents the SDK's
+ * internal per-page schema cache from pre-validating a different contract.
  *
  * When the MCP server returns `isError: true`, the executor throws so that
  * the ToolRuntime's catch path produces an `isError` result for the model.

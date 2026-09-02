@@ -126,6 +126,16 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
+    onTransportFailure: (error) => {
+      // The connection broke mid-call (idle limit, tunnel drop, server
+      // restart): close the generation so its onclose drives the existing
+      // reconnect cycle. A closed or disposed generation has no live
+      // connection to regenerate.
+      const generation = client
+      if (generation === undefined) return
+      ctx.logger.warn(`${label}: a tool call hit a transport failure (${String(error)}); regenerating the connection`)
+      void generation.close().catch(() => { /* the transport is already gone */ })
+    },
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
   // a registration conflict propagates to the startup-await path. Re-syncs

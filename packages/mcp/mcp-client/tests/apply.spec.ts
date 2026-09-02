@@ -50,7 +50,12 @@ vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
 }))
 
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
-  StreamableHTTPClientTransport: vi.fn(),
+  // The factory wraps the instance's close to drain its undici dispatcher,
+  // so the mock must expose the methods the wrapper reads. A plain function
+  // keeps the `new` semantics: the returned object becomes the instance.
+  StreamableHTTPClientTransport: vi.fn(function () {
+    return { start: vi.fn(), close: vi.fn() }
+  }),
 }))
 
 // vi.mock is hoisted above static imports, so the module under test sees the
