@@ -260,6 +260,13 @@
     fetch: true
     searchTimeoutMs: 60000
 
+# ── model routing ───────────────────────────────────────────────────────────
+# `sessionController` stays in the host composition (the web surface mounts
+# it); the two tools around it are per-session contributions. In a profile
+# that mounts no session controller the tools fail loudly at call time.
+- id: tool-model-switch
+  name: '@deepseek-ai/dsh-tool-model-switch'
+
 # ── presentation ────────────────────────────────────────────────────────────
 
 # PTC mode for this agent alone. The row waits for the host's `codeRuntime`

@@ -37,6 +37,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@deepseek-ai/dsh-tool-model-switch` | `list_models`, `switch_model` | `ctx.tools`, `the `sessionController` service (looked up lazily at call time)`, `a calling Agent session for switch_model` | `model/selection`, `agent-default-model`, `tool/call`, `tool/result` | - | Both tools are mounted by the agent presets and delegate to the `sessionController` service, which the Web surface provides. In a deployment with no session controller (headless or SDK) the tools stay visible and fail at call time with a fixed error, so a call in such a mode is the only way to find out the route is unavailable. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2053,6 +2054,55 @@ Wait for the next teammate status, mailbox, or shared-task change after this cal
 Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
+
+<a id="deepseek-aidsh-tool-model-switch"></a>
+
+## `@deepseek-ai/dsh-tool-model-switch`
+
+### `list_models`
+
+List the LLM providers and models this deployment can route to, the current default selection, and any providers whose catalog failed to load. Call it before switch_model.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/llm/tool-model-switch/src/index.ts`](../packages/llm/tool-model-switch/src/index.ts)
+
+### `switch_model`
+
+Switch the LLM model that this session runs on. The switch takes effect from the agent's next model request and is recorded in the session log. The deployment default for new sessions is also updated to the selected route. Call list_models first to see which providers and models are available. Useful when you need to free GPU memory for a local task: switch to a lighter or differently placed model, run the task, then switch back.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "description": "Registered provider route id, for example \"llama-cpp\"."
+    },
+    "model": {
+      "type": "string",
+      "description": "Provider-owned model id, for example \"Qwen3.8-27B-Ridge\"."
+    },
+    "reasoning_effort": {
+      "type": "string",
+      "description": "Optional adapter-owned reasoning effort id; omit for the provider default."
+    }
+  },
+  "required": [
+    "provider",
+    "model"
+  ]
+}
+```
+
+Source: [`packages/llm/tool-model-switch/src/index.ts`](../packages/llm/tool-model-switch/src/index.ts)
+
+Both tools are mounted by the agent presets and delegate to the `sessionController` service, which the Web surface provides. In a deployment with no session controller (headless or SDK) the tools stay visible and fail at call time with a fixed error, so a call in such a mode is the only way to find out the route is unavailable.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 
