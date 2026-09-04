@@ -88,7 +88,7 @@ kind: "package-reference"
 
 服务器的工具会在 harness 开始首个轮次之前出现。服务器更改工具列表时，模型的工具集会自动更新；更新失败时，上一组工具继续可用。
 
-服务器连接断开时——例如本地服务器进程崩溃——插件会以从 500 ms 起逐次翻倍、上限 30 s 的延迟自动重连，并刷新工具集；重连进度在日志中可见。中断期间最后已知的工具仍会列出，但对它们的调用会失败，直到服务器恢复。连续失败十次后，该服务器的工具会被移除，重连停止，直到你重载配置或重启 harness；服务器持续连接一段时间后，该计数会重置。设置 `reconnect.enabled: false` 可禁用自动重连——此时工具在断开后仍会列出，但调用失败，直到你重载。编辑配置项会在原地重载服务器连接，未变的名称保持不变。
+服务器连接断开时——例如本地服务器进程崩溃——插件会以从 500 ms 起逐次翻倍、上限 30 s 的延迟自动重连，并刷新工具集；重连进度在日志中可见。中断期间最后已知的工具仍会列出，但对它们的调用会失败，直到服务器恢复。同一周期也覆盖在调用中途断开的连接：工具调用内部的网络层故障会关闭连接，使下一次调用重新连接并重新同步，而不是永远卡在死连接上失败；服务器侧的错误响应则保持为普通的调用失败。连续失败十次后，该服务器的工具会被移除，重连停止，直到你重载配置或重启 harness；服务器持续连接一段时间后，该计数会重置。设置 `reconnect.enabled: false` 可禁用自动重连——此时工具在断开后仍会列出，但调用失败，直到你重载。编辑配置项会在原地重载服务器连接，未变的名称保持不变。
 
 -----
 
@@ -115,18 +115,20 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | 插件入口：`Config` schema、`serverName` 预留、激活等待 |
 | [`src/connection.ts`](src/connection.ts) | 连接监督器：客户端世代、重连策略、尝试预算、dispose |
 | [`src/tools.ts`](src/tools.ts) | 工具桥接：发现、命名、注册交换、执行、图片投影 |
-| [`src/transport.ts`](src/transport.ts) | 传输工厂：带清洗环境的 stdio spawn、Streamable HTTP |
+| [`src/transport.ts`](src/transport.ts) | 传输工厂：带清洗环境的 stdio spawn、走按行有界 undici dispatcher 的 Streamable HTTP |
 | — | 不发布运行时不变式伴生入口；世代只能通过工具注册表观察。 |
 
 ### 生命周期与同步
 
 `apply` 解析重连策略、在当前注册作用域内预留 `serverName`、启动监督器，并等待初始连接加发现完成。独立 Agent 作用域可以复用相同 namespace，因为其工具与传输彼此隔离；同一作用域内重复会在加载时失败。监督器把所有同步——初始、通知与重连——串行到同一条队列，因此两次同步绝不会交错执行各自的先 dispose 后注册交换。dispose 会取消待执行的重连、关闭活动客户端、等待进行中的尝试与排队同步完全停稳，然后注销当前世代。[自动重连 Agent Note](../../../.agents/notes/implemented/feature/2026-08-06-mcp-client-auto-reconnect.zh.md) 拥有重连决策。
 
-监督器监听 `notifications/tools/list_changed` 并排队一次重新同步；获取阶段失败时保留上一世代注册，注册冲突则回滚本次尝试的世代。每次中断共享一个尝试预算：连续失败达到 `maxAttempts` 次后工具被注销、重连停止；连接存活超过 `maxDelayMs` 会重置预算。
+监督器监听 `notifications/tools/list_changed` 并排队一次重新同步；获取阶段失败时保留上一世代注册，注册冲突则回滚本次尝试的世代。每次中断共享一个尝试预算：连续失败达到 `maxAttempts` 次后工具被注销、重连停止；连接存活超过 `maxDelayMs` 会重置预算。由工具执行器上报的中途调用网络故障会以与传输关闭相同的方式关闭活动世代，因此中断预算与重连周期也覆盖在工具调用内部断开的连接，而不只是两次调用之间掉线的连接。
 
 ### 工具执行内部细节
 
 工具调用会发送一次未缓存的 `tools/call` 请求，携带原始 MCP 名称、JSON 参数、中止信号与配置的超时；公开名称绝不会发给服务器，也绝不会被解析还原。规范成功值是 `{ content: JsonValue[], structuredContent? }`，为程序化调用方与 PTC mode 调用方保留完整的 MCP JSON 块。受支持且已声明的 `outputSchema` 会验证 `structuredContent`；不受支持的 schema 词汇回退为不受约束的 `JsonValue`。MCP 的 `isError` 结果会在任何图片持久化之前抛出，使注册表产生失败的工具结果。图片批次会先整体解码并校验，再保存任一成员；任何拒绝都会把每张图片投影为诊断文本。
+
+在 Streamable HTTP 行上，请求会经过一个按行有界的 undici dispatcher（header 与 body 均受限），因此沉默的服务器无法用运行时自身更大的 fetch 默认值拖住调用。调用内部的网络层拒绝——undici 的 `fetch failed` 包装或 cause 链中的网络族错误码——会上报给连接监督器，后者关闭该世代并让重连周期重新生成；协议层响应与被中止的调用不会上报。[中途调用传输故障 Agent Note](../../../.agents/notes/implemented/feature/2026-09-02-mcp-client-transport-failure-regeneration.zh.md) 拥有此决策。
 
 ### 环境清洗（stdio）
 
@@ -190,7 +192,8 @@ kind: "package-reference"
 
 - **只桥接 MCP 的工具能力**——Resources 与 Prompts 没有 harness 消费机制，暂缓实现。
 - **启动与发现超时继承自 MCP SDK**——插件不暴露连接或发现超时；每次 `initialize` 与分页 `tools/list` 请求都使用 SDK 默认的 60 秒请求超时，因此无响应的服务器或 cursor chain 在初始同步完成期间可能同时延迟激活与 teardown。
-- **重连在传输关闭时触发**——崩溃的 stdio 子进程会触发重连；Streamable HTTP 失败按请求经 SDK 传输自身的恢复机制暴露，因此不可达的 HTTP 服务器会按调用重试，而非由 supervisor 重新 spawn。
+- **重连在传输关闭时触发**——崩溃的 stdio 子进程会触发重连；Streamable HTTP 连接以同样方式重新生成，无论是传输的关闭信号，还是上报给监督器的中途调用网络故障。
+- **HTTP 请求运行在按行有界的 dispatcher 上**——Streamable HTTP 行的每个请求（包括 `initialize` 与 `tools/list`）都经过 header 与 body 超时等于 `toolCallTimeoutMs` 的 undici dispatcher，因此超出预算后保持沉默的空闲服务器会被切断，而不是挂在运行时自身更大的默认值上；持续滴出字节的长流式响应会保持存活。
 - **图片是唯一的持久丰富结果桥接**——PNG、JPEG、WebP 与 GIF 在确切能力得到证明后进入 Native 上下文。音频与嵌入资源载荷仍只存在于执行局部并带明确诊断，资源链接只以文本保留名称与 URI。
 - **不强制执行不受支持的 MCP 输出 schema**——已声明 schema 使用 harness 子集之外的词汇时，`structuredContent` 回退为 `JsonValue`。
 - **要求基于任务的 MCP 工具在调用时被拒绝**——要求使用基于任务的执行（task-based execution）扩展的工具会抛出异常而非被桥接；该扩展未实现。
@@ -204,8 +207,7 @@ kind: "package-reference"
 本开发备注是维护者的工作上下文：开放设计问题与尚未决定的探索方向。它明确不具权威性——已交付行为、限制与既定理由以上文、包代码与所链接的 Agent Note 为准。
 
 - 公开名称算法是由测试固定的 v1 约定；发布后更改会破坏会话历史与权限规则。
-- 由 DSH 显式拥有的连接与发现超时是开放的探索方向；SDK 的 60 秒默认值约束着启动与 teardown。
-- Streamable HTTP 的重连归属仍未决定：按请求重试是 SDK 行为，supervisor 也可以拥有 HTTP 世代。
+- 由 DSH 显式拥有的连接与发现超时是开放的探索方向；当行的 `toolCallTimeoutMs` dispatcher 预算更大时，SDK 的 60 秒请求默认值仍界定 `initialize` 与 `tools/list`，当行预算更小时则由行预算界定。
 - 桥接 MCP Resources 需要 harness 侧的注入决策（系统提示词、按需或模型触发）；桥接 Prompts 需要 harness 缺少的提示词模板概念。
 - 固定的 MCP SDK 仍在演化；上游破坏性变更需要更新桥接。
 
