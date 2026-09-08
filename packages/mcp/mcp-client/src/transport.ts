@@ -41,6 +41,9 @@ function boundedFetch(agent: Agent): FetchLike {
     // BodyInit generics), so the merged object casts to undici's own
     // parameter type; the call's signal, headers, and method pass through
     // untouched.
+    // The agent is this row's own, built in createTransport below; its
+    // idle-wait bounds are per-row state the process-wide proxy dispatcher
+    // cannot carry. proxy-exempt: the row owns this request's transport.
     const dispatch = undiciFetch(url, { ...init, dispatcher: agent } as unknown as Parameters<typeof undiciFetch>[1])
     // undici's Response implements the web Response contract the SDK consumes
     // (status, headers, text/json, body stream).
@@ -68,6 +71,10 @@ export function createTransport(config: Config): Transport {
       // per-tool-call budget; the total-call cap stays with the SDK protocol
       // timer, so a call that exceeds the budget is rejected, not killed by
       // a shorter socket limit.
+      // The row owns its transport because these per-row idle waits cannot
+      // live on the process-wide proxy dispatcher; rows reach their own
+      // servers, and loopback URLs the policy always routes direct.
+      // proxy-exempt: per-row idle-wait bounds require a row-owned agent.
       const agent = new Agent({
         headersTimeout: config.toolCallTimeoutMs,
         bodyTimeout: config.toolCallTimeoutMs,
