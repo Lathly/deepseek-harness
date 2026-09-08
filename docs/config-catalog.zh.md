@@ -3280,6 +3280,26 @@ export interface Config {
 
 来源：[`packages/web/web-search-perplexity/src/index.ts:30`](../packages/web/web-search-perplexity/src/index.ts)
 
+<a id="deepseek-aidsh-web-search-searxng"></a>
+
+## `@deepseek-ai/dsh-web-search-searxng`
+
+需要：`web`
+
+```ts config-catalog
+/** Plugin config (all optional — `apply` fills env-var and constant defaults). */
+export interface Config {
+  /** SearXNG instance base; `/search` is appended. Falls back to `$SEARXNG_URL`, then the local default. */
+  baseURL?: string
+  /** Comma-separated engine allow-list sent as `engines` (e.g. `google,duckduckgo`). */
+  engines?: string
+  /** Comma-separated category sent as `categories` (e.g. `general,news`). */
+  categories?: string
+}
+```
+
+来源：[`packages/web/web-search-searxng/src/index.ts:36`](../packages/web/web-search-searxng/src/index.ts)
+
 <a id="deepseek-aidsh-webhook-github"></a>
 
 ## `@deepseek-ai/dsh-webhook-github`
