@@ -18,7 +18,6 @@ import type { AgentOptions } from './runtime-types.ts'
 export * from './runtime-types.ts'
 export * from './types.ts'
 export type * from './projection.ts'
-export * from './inbox.ts'
 export * from './consumed-work.ts'
 export * from './model-selection.ts'
 export { agentCarrier, agentEvents, assembleContextFor, emitAgentEvent } from './dispatch.ts'
@@ -194,11 +193,12 @@ export interface AgentFactory {
    */
   createAgent(ownerCtx: Context, options: CreateAgentOptions): Promise<AgentHandle>
   /**
-   * Prepare a persisted session and resume an agent on it. Async because it awaits
-   * both `ctx.sessionPersistence.prepare` and the optional unpublished setup
-   * transaction; must be called after that service exists (consumers inject
-   * `sessionPersistence`). Publication follows the same setup-commit and
-   * ordered boundary as {@link createAgent}.
+   * Resume an agent on a persisted session. Async because it opens the
+   * persisted session for write, reads and repairs the log, publishes it, and
+   * awaits the optional unpublished setup transaction; must be called after
+   * `ctx.sessionPersistence` exists (consumers inject `sessionPersistence`).
+   * Publication follows the same setup-commit and ordered boundary as
+   * {@link createAgent}.
    * @param ownerCtx - caller-bound context that owns load, setup, and the live handle.
    * @param options - persisted identity, configuration, and optional setup.
    * @returns the owned handle after setup, both announcements, and loop start complete.

@@ -18,16 +18,17 @@ import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { logPath } from '../../../packages/session/session-persistence-jsonl/src/format.ts'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
-  launchWebScaffold, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
+  launchWebScaffold, readPersistedEvents, seedSession, watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('../../../snapshots/web/workspace-management', import.meta.url))
 // The seed is another scenario's committed fixture, reused read-only: this
 // spec needs any one cold session row, not new recorded content.
-const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.jsonl', import.meta.url))
+const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v2.jsonl', import.meta.url))
 const MODE = webSnapshotMode()
 const BROWSER_EXPECTED = join(SNAPSHOT_DIR, 'directory-browser.expected.md')
 const SEED_ID = 'workspace-management-web-e2e'
@@ -41,6 +42,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let holdAttachment = false
+  let releaseAttachment: (() => void) | undefined
 
   /**
    * Raise the region header's directory dialog and drive it to a directory via
@@ -123,6 +126,22 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await seedSession(scaffold, await readFile(SEED, 'utf8'), SEED_ID)
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
+    await page.routeWebSocket('**/api/remote.mux', (route) => {
+      const server = route.connectToServer()
+      server.onMessage((message) => {
+        const frame = JSON.parse(String(message)) as {
+          type: string
+          value?: { type: string; workspace?: { sessionIds: string[] } }
+        }
+        if (holdAttachment && frame.type === 'item' && frame.value?.type === 'upsert'
+          && frame.value.workspace?.sessionIds.includes(SEED_ID) === true) {
+          holdAttachment = false
+          releaseAttachment = () => { route.send(message) }
+          return
+        }
+        route.send(message)
+      })
+    })
     tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
@@ -130,6 +149,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
 
   afterAll(async () => {
     await browser?.close()
+    releaseAttachment = undefined
     await scaffold?.close()
   })
 
@@ -210,32 +230,35 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await adoptDirectory(scaffold.workspaceCwd, { waitForAgent: true })
     const workspace = await scaffold.ctx.workspaceRegistry.resolveByPath(scaffold.workspaceCwd)
     if (workspace === undefined) throw new Error('GUI did not register the existing project directory')
+    holdAttachment = true
     await workspace.attachSession(SessionId(SEED_ID))
     const header = (await scaffold.ctx.sessionPersistence.list())
+      .map(snapshot => snapshot.header)
       .find(candidate => candidate.id === SEED_ID)
     if (header === undefined) throw new Error('seeded Session log disappeared before deletion')
-    const logLocation = scaffold.ctx.sessionPersistence.locate(header)
-    if (logLocation === undefined) throw new Error('JSONL persistence did not expose the seeded log path')
+    const seededLogPath = logPath(scaffold.persistenceRoot, header.cwd, header.id, 'zstd')
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
-    await stat(logLocation.path)
+    await stat(seededLogPath)
 
-    // Open the seeded (first/accounted) Session so deletion must preserve the
-    // current selection while it moves into Ungrouped.
+    // The attachment stream can lag the Host commit while New Session is
+    // already visible. A row count or position cannot identify the seed.
     const groupRow = page.locator('[role="treeitem"]').filter({ hasText: workspace.title }).first()
     await groupRow.waitFor({ timeout: 10_000 })
     // The header row is wrapped by its HoverCard anchor span, so the section
     // is the nearest groupSection ancestor, not the immediate parent.
     const groupSection = groupRow.locator('xpath=ancestor::*[contains(@class, "groupSection")][1]')
-    await expect.poll(async () => {
-      const count = await groupSection.locator('[role="treeitem"]').count()
-      if (count < 2 && await groupRow.getAttribute('aria-expanded') !== 'true') {
-        await groupRow.click()
-        await page.waitForTimeout(50)
-      }
-      return await groupSection.locator('[role="treeitem"]').count()
-    }, { timeout: 10_000 }).toBeGreaterThanOrEqual(2)
-    const seededRow = groupSection.locator('[role="treeitem"]').nth(1)
-    await seededRow.click()
+    if (await groupRow.getAttribute('aria-expanded') !== 'true') await groupRow.click()
+    const blankRow = groupSection.getByRole('treeitem', { name: 'New Session', exact: true })
+    await expect.poll(() => blankRow.getAttribute('aria-selected'), { timeout: 10_000 }).toBe('true')
+    // The seed is this account's only non-blank Session; its title changes on resume.
+    const seededRow = groupSection.locator('[role="treeitem"][aria-selected]')
+      .filter({ hasNot: page.getByText('New Session', { exact: true }) })
+    await expect.poll(() => releaseAttachment, { timeout: 10_000 }).toBeDefined()
+    expect(await seededRow.count()).toBe(0)
+    const deliverAttachment = releaseAttachment!
+    releaseAttachment = undefined
+    deliverAttachment()
+    await seededRow.click({ timeout: 10_000 })
     await expect.poll(() => seededRow.getAttribute('aria-selected'), { timeout: 10_000 }).toBe('true')
 
     await clickHoverAction(groupRow, `Workspace actions for ${workspace.title}`)
@@ -261,8 +284,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
       { timeout: 10_000 },
     ).toBe(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
-    await stat(logLocation.path)
-    expect((await scaffold.ctx.sessionPersistence.inspect(SessionId(SEED_ID))).events.length).toBeGreaterThan(0)
+    await stat(seededLogPath)
+    expect((await readPersistedEvents(scaffold, SessionId(SEED_ID))).length).toBeGreaterThan(0)
 
     // Re-registering the exact deleted path immediately, without a reload, is
     // a supported reversible flow. It creates a fresh Workspace id and does
@@ -285,7 +308,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     await expect.poll(() => page.getByText('Ungrouped', { exact: true }).count(), { timeout: 10_000 })
       .toBeGreaterThanOrEqual(1)
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
-    await stat(logLocation.path)
+    await stat(seededLogPath)
 
     // Restore the deleted-registry state so reload still verifies deletion
     // persistence independently of the successful re-registration above.
@@ -308,8 +331,8 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     ).toBe(1)
     expect(scaffold.ctx.workspaceRegistry.get(workspace.id)).toBeUndefined()
     expect(await readFile(join(scaffold.workspaceCwd, 'workspace', 'a.txt'), 'utf8')).toBe('alpha\n')
-    await stat(logLocation.path)
-    expect((await scaffold.ctx.sessionPersistence.inspect(SessionId(SEED_ID))).events.length).toBeGreaterThan(0)
+    await stat(seededLogPath)
+    expect((await readPersistedEvents(scaffold, SessionId(SEED_ID))).length).toBeGreaterThan(0)
 
     expect(transientSlotErrors).toEqual([])
     expect(slotConsoleErrors).toEqual([])
@@ -583,7 +606,7 @@ describe('web e2e: workspace management (create / rename / flat view / hover aff
     // Durable on the host: the registry-global set carries the id while the
     // session log itself stays in persistence untouched.
     expect([...scaffold.ctx.workspaceRegistry.archivedSessionIds]).toEqual([SessionId(SEED_ID)])
-    expect((await scaffold.ctx.sessionPersistence.list()).map(header => header.id)).toContain(SessionId(SEED_ID))
+    expect((await scaffold.ctx.sessionPersistence.list()).map(snapshot => snapshot.header.id)).toContain(SessionId(SEED_ID))
     // Reload: the hidden state is rebuilt from the workspace.list baseline.
     const warningStart = tripwire.warnings.length
     await page.reload({ waitUntil: 'load' })

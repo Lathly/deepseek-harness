@@ -17,7 +17,7 @@ Status: implemented
 
 controller 在调用时通过 `ctx.get('sessionController')` 惰性查找，因此该包在有任何 `tools` 的地方都能加载。在没有挂载会话控制器的部署（headless 或 SDK profile）中，两个工具在目录中保持可见，并在调用时以固定错误失败（`switch_model: the session controller is not available in this deployment`，以及 `list_models` 的对应版本），因此调用是发现该路由不可用的唯一方式。面向模型的描述、参数与结果文本逐字固定，来自已验证的会话本地插件。
 
-这些工具是既有选择 seam 的面向模型消费者：[默认模型跟随选择器](2026-08-07-default-model-follows-the-picker.zh.md) 拥有 `agent-default-model` 持久化与 `model/selection` 事件，[Web 会话模型选择器](2026-07-24-web-session-model-selector.zh.md) 是同一偏好的用户界面编辑器；本注不引入新状态，只新增 `sessionController` 之上的工具面。
+这些工具是既有选择 seam 的面向模型消费者：[默认模型跟随选择器](../../archived/feature/2026-08-07-default-model-follows-the-picker.md) 拥有 `agent-default-model` 持久化与 `model/selection` 事件，[Web 会话模型选择器](../../archived/feature/2026-07-24-web-session-model-selector.md) 是同一偏好的用户界面编辑器；本注不引入新状态，只新增 `sessionController` 之上的工具面。
 
 agent 预设（`standard`、`ptc`、`cordis`）在 `tool-web` 块之后挂载该包；`minimal` 保持干净。`sessionController` 服务仍是 host 面贡献（Web 面提供它），`packages/bundle/base` 携带新的依赖，使预设的 specifier 解析能找到该包。该包没有 `Config`；没有需要随部署变化的配置项。
 
@@ -37,7 +37,7 @@ agent 预设（`standard`、`ptc`、`cordis`）在 `tool-web` 块之后挂载该
 
 ## Consequences
 
-- 模型可以在会话中途重新路由自身；切换是持久的（会话事件），通过[既有持久化 seam](2026-08-07-default-model-follows-the-picker.zh.md)移动部署默认值，从下一次模型请求生效。在带缓存模型上限的 router 上，切换调用本身很快，模型加载是惰性的、发生在下一次请求。
+- 模型可以在会话中途重新路由自身；切换是持久的（会话事件），通过[既有持久化 seam](../../archived/feature/2026-08-07-default-model-follows-the-picker.md)移动部署默认值，从下一次模型请求生效。在带缓存模型上限的 router 上，切换调用本身很快，模型加载是惰性的、发生在下一次请求。
 - standard、ptc 与 cordis 预设目录各新增两个 schema（一个三属性对象与一个空对象），在这些预设中是一笔小额固定 token 成本。
 - headless 与 SDK 部署会看到这两个工具，并得到固定的调用时错误，而非隐藏的能力。
 - 验证文本的会话本地动态插件自此冗余；在永久路径于实机实例验证后可退役。

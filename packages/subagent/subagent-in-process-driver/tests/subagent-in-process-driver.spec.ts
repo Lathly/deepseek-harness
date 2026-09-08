@@ -10,7 +10,6 @@ import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
 import * as AgentInvariant from '@deepseek-ai/dsh-agent/invariant'
 import * as AgentLoopInvariant from '@deepseek-ai/dsh-agent-loop/invariant'
 import SubagentRuntime, { snapshotSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import { maxTokensResponse, MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import { startInProcessRun } from '../src/index.ts'
@@ -29,11 +28,10 @@ async function setup(script: Script, parentOptions: Partial<AgentOptions> = {}) 
   await mountAgentLoopTestDependencies(ctx)
   await mountInvariants(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SubagentRuntime)
   const adapter = new MockAdapter(script)
   ctx.llm.registerAdapter(['mock'], adapter)
-  const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock', ...parentOptions })
+  const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock', ...parentOptions })
   return { ctx, parent, adapter }
 }
 
@@ -71,7 +69,7 @@ describe('startInProcessRun', () => {
 
   it('uses explicit child model selectors when the parent has none and preserves its cwd', async () => {
     const { ctx } = await setup([textResponse('driver answer')])
-    const parent = ctx.agentLoop.create(SessionId('bare-parent'), {}, { cwd: '/workspace' })
+    const parent = await ctx.agentLoop.create(SessionId('bare-parent'), {}, { cwd: '/workspace' })
     const run = await startInProcessRun({
       ...request(parent),
       agentOptions: { provider: 'mock', model: 'mock' },
@@ -307,7 +305,7 @@ describe('startInProcessRun', () => {
     // no provider/model is fabricated, so the child's turn errors for want of a
     // route rather than silently adopting one.
     const { ctx } = await setup([])
-    const parent = ctx.agentLoop.create(SessionId('routeless-parent'), {})
+    const parent = await ctx.agentLoop.create(SessionId('routeless-parent'), {})
     const run = await startInProcessRun(request(parent), {})
     const child = ctx.agents.get(run.id)!
     expect(child.options).toEqual({ subagentDepth: 1 })

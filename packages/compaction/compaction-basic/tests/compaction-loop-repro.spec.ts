@@ -13,7 +13,6 @@ import * as SessionInvariant from '@deepseek-ai/dsh-session/invariant'
 import * as AgentInvariant from '@deepseek-ai/dsh-agent/invariant'
 import * as AgentLoopInvariant from '@deepseek-ai/dsh-agent-loop/invariant'
 import { BasicCompactionEngine } from '@deepseek-ai/dsh-compaction-basic'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import TokenMeter from '@deepseek-ai/dsh-token-meter'
 import * as LlmRetry from '@deepseek-ai/dsh-llm-retry'
 import { Session, SessionId, type SessionEvent, type SurfaceEvent } from '@deepseek-ai/dsh-session'
@@ -151,9 +150,6 @@ async function harness(toolSteps: number): Promise<{ ctx: Context; compact: Repr
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   await mountInvariants(ctx)
-  // AgentLoop and TokenMeter both declare the registry as a required
-  // injection; mount it before either activates.
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(TokenMeter)
   ctx.llm.registerAdapter(['mock'], new StepwiseToolAdapter(toolSteps))
@@ -201,6 +197,7 @@ function overflowHistorySeed(): readonly SessionEvent[] {
     }), { surfaceOp: 'append' })
     session.append('step/start', { turn, step: 1 })
     session.append('assistant/message', {
+      stream: [],
       turn,
       step: 1,
       message: createMessage({
@@ -225,7 +222,7 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
       ...await next(), provider: 'mock', model: 'mock',
     }))
     try {
-      const agent = ctx.agentLoop.create(SessionId('routed-pressure'), {
+      const agent = await ctx.agentLoop.create(SessionId('routed-pressure'), {
         provider: 'unconfigured-agent-fallback',
         model: 'unconfigured-agent-fallback',
       })
@@ -246,7 +243,7 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
   it('runs automatic pressure between the completed tool step and the next step', async () => {
     const { ctx } = await harness(8)
     try {
-      const agent = ctx.agentLoop.create(SessionId('post-step-order'), { provider: 'mock', model: 'mock' })
+      const agent = await ctx.agentLoop.create(SessionId('post-step-order'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'do tool work' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
 
@@ -278,7 +275,7 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
   it('the head checkpoint the loop lands is a balanced cut on both sides', async () => {
     const { ctx } = await harness(8)
     try {
-      const agent = ctx.agentLoop.create(SessionId('repro'), { provider: 'mock', model: 'mock' })
+      const agent = await ctx.agentLoop.create(SessionId('repro'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'do a long multi-step task' }], source: { kind: 'user' } }))
       await waitForIdle(ctx, agent)
 
@@ -316,7 +313,6 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
       const adapter = new OverflowRecoveryAdapter(delivery)
       await mountAgentLoopTestDependencies(ctx)
       await mountInvariants(ctx)
-      await ctx.plugin(SessionProjectionRegistry)
       await ctx.plugin(AgentLoop, { agents: [] })
       await ctx.plugin(TokenMeter)
       ctx.llm.registerAdapter(['mock'], adapter)
@@ -395,7 +391,6 @@ describe('context-overflow recovery across the real loop and compaction-basic', 
     const adapter = new OverflowRecoveryAdapter('thrown', true)
     await mountAgentLoopTestDependencies(ctx)
     await mountInvariants(ctx)
-    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(LlmRetry)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(TokenMeter)

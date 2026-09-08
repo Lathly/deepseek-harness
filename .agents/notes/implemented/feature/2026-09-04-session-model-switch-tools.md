@@ -17,7 +17,7 @@ A session had no model-visible way to change which LLM route it runs on. The use
 
 The controller is looked up lazily at call time with `ctx.get('sessionController')`, so the package loads anywhere `tools` is present. In a deployment that mounts no session controller (headless or SDK profiles) both tools stay visible in the catalog and fail at call time with a fixed error (`switch_model: the session controller is not available in this deployment`, and the `list_models` equivalent), so a call is the only way to discover the route is unavailable. The model-facing description, parameter, and result texts are pinned verbatim from the validated session-local plugin.
 
-The tools are a model-facing consumer of the existing selection seam: [the default model follows the picker](2026-08-07-default-model-follows-the-picker.md) owns the `agent-default-model` persistence and the `model/selection` event, and the [Web session model selector](2026-07-24-web-session-model-selector.md) is the user-facing editor of the same preference; this note adds no new state, only the tool surface over `sessionController`.
+The tools are a model-facing consumer of the existing selection seam: [the default model follows the picker](../../archived/feature/2026-08-07-default-model-follows-the-picker.md) owns the `agent-default-model` persistence and the `model/selection` event, and the [Web session model selector](../../archived/feature/2026-07-24-web-session-model-selector.md) is the user-facing editor of the same preference; this note adds no new state, only the tool surface over `sessionController`.
 
 The agent presets (`standard`, `ptc`, `cordis`) mount the package after the `tool-web` block; `minimal` stays clean. The `sessionController` service remains a host-plane contribution (the Web surface provides it), and `packages/bundle/base` carries the new dependency so preset specifier resolution finds the package. The package has no `Config`; there is nothing deployment-varying to configure.
 
@@ -37,7 +37,7 @@ Unit (`packages/llm/tool-model-switch/tests/tool-model-switch.spec.ts`): the reg
 
 ## Consequences
 
-- The model can re-route its own session mid-conversation; the switch is durable (session event) and moves the deployment default through the [existing persistence seam](2026-08-07-default-model-follows-the-picker.md), applying from the next model request. On a router with a cached-model limit the switch call itself is fast and the model load is lazy, on the next request.
+- The model can re-route its own session mid-conversation; the switch is durable (session event) and moves the deployment default through the [existing persistence seam](../../archived/feature/2026-08-07-default-model-follows-the-picker.md), applying from the next model request. On a router with a cached-model limit the switch call itself is fast and the model load is lazy, on the next request.
 - The standard, ptc, and cordis preset catalogs gain two schemas (a three-property object and an empty object), a small standing token cost in those presets.
 - Headless and SDK deployments see the tools and get the fixed call-time error instead of a hidden capability.
 - The session-local dynamic plugin that validated the text is now redundant and can be retired once the permanent path is verified on a live instance.

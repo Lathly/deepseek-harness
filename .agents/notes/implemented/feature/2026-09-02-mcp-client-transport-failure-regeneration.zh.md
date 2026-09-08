@@ -6,7 +6,7 @@ English | [中文](2026-09-02-mcp-client-transport-failure-regeneration.md)
 
 ## Problem
 
-Streamable HTTP 行上的请求运行在 Node 默认的 undici fetch agent 上，其 header 与 body 超时间接近 300 s。长时间不返回字节、耗时数分钟的 LLM 型 `tools/call`（生产环境中记忆操作需 5–10 分钟）会在调用中途被该默认 agent 切断 socket。SDK 的协议级 `timeout` 会中止挂起请求，于是模型看到客户端侧的 `fetch failed`，而服务器仍在继续工作；transport 的连接则陷入卡死：`onclose` 永远不触发，[自动重连](2026-08-06-mcp-client-auto-reconnect.zh.md)监督器从未观察到下线的代，该代上的后续每次调用都以 `fetch failed` 失败，直到人工编辑配置（HMR 重建连接）或重启 Host。生产环境在单个行上于 1 小时内卡死两次。
+Streamable HTTP 行上的请求运行在 Node 默认的 undici fetch agent 上，其 header 与 body 超时间接近 300 s。长时间不返回字节、耗时数分钟的 LLM 型 `tools/call`（生产环境中记忆操作需 5–10 分钟）会在调用中途被该默认 agent 切断 socket。SDK 的协议级 `timeout` 会中止挂起请求，于是模型看到客户端侧的 `fetch failed`，而服务器仍在继续工作；transport 的连接则陷入卡死：`onclose` 永远不触发，[自动重连](../../archived/feature/2026-08-06-mcp-client-auto-reconnect.md)监督器从未观察到下线的代，该代上的后续每次调用都以 `fetch failed` 失败，直到人工编辑配置（HMR 重建连接）或重启 Host。生产环境在单个行上于 1 小时内卡死两次。
 
 ## Decision
 
