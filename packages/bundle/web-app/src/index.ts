@@ -12,9 +12,10 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { networkInterfaces } from 'node:os'
+import { homedir, networkInterfaces } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -154,6 +155,19 @@ function webSurfacePrompt(webUrl: string): string {
     + 'Do not start a replacement server unless the user asks; if one is needed, use a managed background job and verify its exact URL.'
 }
 
+/** Persist this process's launch token for loopback clients that cannot hold the browser cookie. */
+function persistLaunchToken(authenticatedUrl: string): void {
+  if (process.env.VITEST === 'true') return
+  try {
+    const token = new URL(authenticatedUrl).searchParams.get('token')
+    if (token === null || token === '') return
+    const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+    writeFileSync(join(home, 'web-launch-token'), `${token}\n`, { mode: 0o600 })
+  } catch {
+    /* best-effort: Augmentor's pipe reads this file; a missing file only delays its first connect */
+  }
+}
+
 /** Resolve the canonical loopback URL from the active Web server. */
 function localWebUrl(ctx: Context): string {
   const port = ctx.get('webServer')?.port
@@ -276,6 +290,7 @@ export function apply(ctx: Context, config: Config): void {
           ? undefined
           : connectionCtx.connection.authenticatedUrl(`http://${lanCandidate}:${String(port)}`)
         ANNOUNCED_ROOTS.add(connectionCtx.root)
+        persistLaunchToken(authenticatedUrl)
         if (config.printUrl) {
           console.log(`dsh web: ${authenticatedUrl}${lanUrl === undefined ? '' : ` (LAN: ${lanUrl})`}`)
         }
