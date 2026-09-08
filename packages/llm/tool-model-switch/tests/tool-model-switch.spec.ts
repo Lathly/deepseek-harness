@@ -76,7 +76,7 @@ interface Bench {
 /** Boot tools + agent registry, mount the tool package, and optionally serve the controller. */
 async function harness(withController: boolean, selectError?: Error): Promise<Bench> {
   const ctx = new Context()
-  await ctx.plugin(SystemPrompt, { persona: '' })
+  await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   const mock = mockController(selectError)
@@ -118,7 +118,7 @@ describe('dsh-tool-model-switch registration', () => {
 
   it('unloading the tool fiber removes both tools (HMR safety)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt, { persona: '' })
+    await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     const fiber = await ctx.plugin(ToolModelSwitch)
     const names = () => ctx.tools.schemas().map(schema => schema.name)

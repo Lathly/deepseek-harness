@@ -18,7 +18,6 @@ import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { Inbox } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ModelCatalog, SessionSelectModelRequest } from '@deepseek-ai/dsh-api-session-controller'
@@ -83,7 +82,12 @@ function agent(ctx: Context): Agent {
   const id = SessionId('model-switch-loader-agent')
   const session = Session.create(id)
   const value: Agent = {
-    id, options: {}, session, inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
+    id, options: {}, session,
+    inbox: {
+      nextTurn: [], nextStep: [],
+      clear() {}, append() {}, prepend() {},
+      replace: () => false, remove: () => false, splice: () => [],
+    },
     status: 'idle', ctx: scope.ctx,
     followup: () => {}, steer: () => {}, inject: () => {}, send: () => {}, cancel() {},
     runMaintenance: task => task(new AbortController().signal),
