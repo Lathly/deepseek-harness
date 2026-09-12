@@ -208,6 +208,7 @@ This Dev Note is working context for maintainers: open design questions and dire
 
 - The public-name algorithm is a v1 contract pinned by tests; changing it after release would break session history and permission rules.
 - An explicit DSH-owned connection and discovery timeout is an open direction; the SDK's 60-second request default still bounds `initialize` and `tools/list` when the row's `toolCallTimeoutMs` dispatcher budget is larger, and the row budget bounds them when it is smaller.
+- Streamable-HTTP reconnection ownership is undecided: per-request retry is SDK behavior, and the supervisor could own the HTTP generations.
 - Bridging MCP Resources needs a harness-side injection decision (system prompt, on demand, or model-triggered); bridging Prompts needs a prompt-template concept the harness lacks.
 - The pinned MCP SDK is still evolving; a breaking upstream change requires updating the bridge.
 
