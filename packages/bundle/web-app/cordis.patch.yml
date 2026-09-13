@@ -185,7 +185,9 @@
         # LAN literals derived from the active bind plus --trusted-host extras.
         # A deployment adding authorities keeps this expression and concatenates
         # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
-        trustedHosts: !!js ctx.webRuntime.trustedHosts
+        # pop-os tailnet DNS name: the Tailscale serve proxy forwards Host as-is,
+        # so phone traffic via https://pop-os.taildc49b0.ts.net needs this fence entry.
+        trustedHosts: !!js "['pop-os.taildc49b0.ts.net', ...ctx.webRuntime.trustedHosts]"
 
     # Raw Blob and ReadableStream uploads run independently of Connection's
     # RPC and generation service.
