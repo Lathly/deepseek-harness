@@ -63,7 +63,6 @@ import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
 import * as StagehandBrowserTools from '@deepseek-ai/dsh-experimental-browser-use-stagehand-native'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
-import * as ToolModelSwitch from '@deepseek-ai/dsh-tool-model-switch'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import type PluginManager from '@deepseek-ai/dsh-plugin-manager'
 import * as PluginManagerTools from '@deepseek-ai/dsh-plugin-manager/tools'
@@ -618,18 +617,6 @@ const TOOL_PACKAGES: ToolPackage[] = [
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
       'All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.',
-  },
-  {
-    pkg: '@deepseek-ai/dsh-tool-model-switch',
-    dir: 'tool-model-switch',
-    source: 'packages/llm/tool-model-switch/src/index.ts',
-    requires: ['ctx.tools', 'the `sessionController` service (looked up lazily at call time)', 'a calling Agent session for switch_model'],
-    writes: ['model/selection', 'agent-default-model', 'tool/call', 'tool/result'],
-    async mount(ctx) {
-      await ctx.plugin(ToolModelSwitch)
-    },
-    note:
-      'Both tools are mounted by the agent presets and delegate to the `sessionController` service, which the Web surface provides. In a deployment with no session controller (headless or SDK) the tools stay visible and fail at call time with a fixed error, so a call in such a mode is the only way to find out the route is unavailable.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',
