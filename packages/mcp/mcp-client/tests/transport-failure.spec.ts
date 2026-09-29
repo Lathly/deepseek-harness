@@ -12,53 +12,50 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
-import { McpError } from '@modelcontextprotocol/sdk/types.js'
+import { ProtocolError } from '@modelcontextprotocol/client'
 
 // ---- Mock MCP SDK (mirrors reconnect.spec.ts) ----
 
-const { mockConnect, mockClose, mockListTools, mockCallTool, MockClient, instances } = vi.hoisted(() => {
+const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient, instances } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
   const mockCallTool = vi.fn<(
-    _params?: Record<string, unknown>, _compatibilitySchema?: unknown, _options?: unknown,
+    _params?: Record<string, unknown>, _options?: unknown,
   ) => Promise<unknown>>()
-  const mockRequest = vi.fn(async (
-    request: { method: string; params?: Record<string, unknown> },
-    _schema: unknown,
-    options?: unknown,
-  ): Promise<unknown> => {
-    if (request.method === 'tools/list') return await mockListTools(request.params)
-    if (request.method === 'tools/call') return await mockCallTool(request.params, undefined, options)
-    throw new Error(`unexpected MCP request: ${request.method}`)
-  })
+  const mockSetNotificationHandler = vi.fn()
   class MockClient {
+    transport: object | undefined = {}
     onclose: (() => void) | undefined
     connect = mockConnect
     close = mockClose
-    request = mockRequest
-    setNotificationHandler = vi.fn()
-    constructor() { instances.push(this) }
+    getServerCapabilities = () => ({ tools: {} })
+    getInstructions(): string | undefined { return undefined }
+    listResources = async () => ({ resources: [] })
+    listTools = mockListTools
+    callTool = mockCallTool
+    constructor(_info: unknown, options: { listChanged: { tools: { onChanged: () => void } } }) {
+      instances.push(this)
+      mockSetNotificationHandler('notifications/tools/list_changed', options.listChanged.tools.onChanged)
+    }
   }
   const instances: MockClient[] = []
-  return { mockConnect, mockClose, mockListTools, mockCallTool, MockClient, instances }
+  return { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient, instances }
 })
 
-vi.mock('@modelcontextprotocol/sdk/client/index.js', () => ({
+vi.mock('@modelcontextprotocol/client', async importOriginal => ({
+  ...await importOriginal<typeof import('@modelcontextprotocol/client')>(),
   Client: MockClient,
-}))
-
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () => ({
-  StdioClientTransport: vi.fn(),
-}))
-
-vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
   // The factory wraps the instance's close to drain its undici dispatcher,
   // so the mock must expose the methods the wrapper reads. A plain function
   // keeps the `new` semantics: the returned object becomes the instance.
   StreamableHTTPClientTransport: vi.fn(function () {
     return { start: vi.fn(), close: vi.fn() }
   }),
+}))
+
+vi.mock('@modelcontextprotocol/client/stdio', () => ({
+  StdioClientTransport: vi.fn(),
 }))
 
 // vi.mock is hoisted above static imports, so the modules under test see the
@@ -182,7 +179,7 @@ describe('transport failure regeneration', () => {
     await apply(ctx, httpConfig({ initialDelayMs: 5, maxDelayMs: 40, maxAttempts: 5 }))
     await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
 
-    mockCallTool.mockRejectedValue(new McpError(-32601, 'method not found'))
+    mockCallTool.mockRejectedValue(new ProtocolError(-32601, 'method not found'))
     const failed = await executeTool(ctx, 'mcp__srv__remote')
     expect(failed.isError).toBe(true)
 
@@ -270,7 +267,7 @@ describe('transport failure regeneration', () => {
 
   it('omits the report when the bridge options define no handler', async () => {
     const { infos } = captureLogs(ctx)
-    const client = new MockClient()
+    const client = new MockClient({ name: 'mock', version: '1' }, { listChanged: { tools: { onChanged: () => { /* no supervisor on this bridge */ } } })
     const opts: ToolBridgeOptions = {
       registrationFailure: 'contain',
       serverName: 'srv',
@@ -290,7 +287,7 @@ describe('transport failure regeneration', () => {
 
 describe('isTransportFailure', () => {
   it('classifies protocol-level responses as non-transport failures', () => {
-    expect(isTransportFailure(new McpError(-32601, 'method not found'))).toBe(false)
+    expect(isTransportFailure(new ProtocolError(-32601, 'method not found'))).toBe(false)
   })
 
   it('classifies undici fetch failures by their wrapper message', () => {

@@ -6,9 +6,9 @@
  * @module
  */
 
-import type { FetchLike, Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import type { FetchLike, Transport } from '@modelcontextprotocol/client'
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { Agent, fetch as undiciFetch } from 'undici'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './index.ts'
@@ -79,14 +79,10 @@ export function createTransport(config: Config): Transport {
         headersTimeout: config.toolCallTimeoutMs,
         bodyTimeout: config.toolCallTimeoutMs,
       })
-      // The MCP SDK's StreamableHTTPClientTransport has optional callback
-      // properties typed without `| undefined` (exactOptionalPropertyTypes
-      // mismatch with the Transport interface); the SDK constructed the
-      // object, so the cast records only that widening.
       const transport = new StreamableHTTPClientTransport(
         new URL(config.url),
         { fetch: boundedFetch(agent), requestInit: { headers: config.headers } },
-      ) as Transport
+      )
       const closeTransport = transport.close.bind(transport)
       transport.close = async () => {
         await closeTransport()
