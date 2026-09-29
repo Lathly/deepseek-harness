@@ -16,7 +16,7 @@ import { ProtocolError } from '@modelcontextprotocol/client'
 
 // ---- Mock MCP SDK (mirrors reconnect.spec.ts) ----
 
-const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotificationHandler, MockClient, instances } = vi.hoisted(() => {
+const { mockConnect, mockClose, mockListTools, mockCallTool, MockClient, instances } = vi.hoisted(() => {
   const mockConnect = vi.fn<() => Promise<void>>()
   const mockClose = vi.fn<() => Promise<void>>()
   const mockListTools = vi.fn<(_params?: Record<string, unknown>) => Promise<unknown>>()
@@ -267,7 +267,7 @@ describe('transport failure regeneration', () => {
 
   it('omits the report when the bridge options define no handler', async () => {
     const { infos } = captureLogs(ctx)
-    const client = new MockClient({ name: 'mock', version: '1' }, { listChanged: { tools: { onChanged: () => { /* no supervisor on this bridge */ } } })
+    const client = new MockClient({ name: 'mock', version: '1' }, { listChanged: { tools: { onChanged: () => { /* no supervisor on this bridge */ } } }})
     const opts: ToolBridgeOptions = {
       registrationFailure: 'contain',
       serverName: 'srv',
