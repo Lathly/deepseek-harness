@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-04-session-model-switch-tools.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-04-session-model-switch-tools.md
-2026-09-04-session-model-switch-tools.md: 95ddb6b22a8e2367e70af741e908fb287b3af70c
-2026-09-04-session-model-switch-tools.zh.md: ae6ac7ffde0412fa29ed0d2b1cc00e79fadad25c
+/agent-note-session-model-switch-tools-list-models-switch-model:
+  en: 1a664b9625acdcaa
+  zh: 9f1acf4de98d347f
+/agent-note-session-model-switch-tools-list-models-switch-model/problem:
+  en: e4f98b28a5550bea
+  zh: 8be27a5b6f67bb4e
+/agent-note-session-model-switch-tools-list-models-switch-model/decision:
+  en: 6ca35bd957d7f6a1
+  zh: de2554ff94f618c3
+/agent-note-session-model-switch-tools-list-models-switch-model/alternatives-considered:
+  en: 1f2e7276235bfe56
+  zh: ccf04285bc3b7fb0
+/agent-note-session-model-switch-tools-list-models-switch-model/testing:
+  en: bcb1af444b75e90a
+  zh: 3342d31c96f5fd9d
+/agent-note-session-model-switch-tools-list-models-switch-model/consequences:
+  en: 62fc42caed4b2909
+  zh: f184b461a8caadc1

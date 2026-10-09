@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-04-web-search-searxng-provider.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-04-web-search-searxng-provider.md
-2026-09-04-web-search-searxng-provider.md: 13c5ffb6f0e1698b8bbe5b6fbe795fe67145ecfe
-2026-09-04-web-search-searxng-provider.zh.md: dcdc6be20f07a0c7b2477b2d29a707a99cb7b6f7
+/agent-note-searxng-web-search-provider:
+  en: 186d6d42ece3c977
+  zh: bb18437cc64942b1
+/agent-note-searxng-web-search-provider/problem:
+  en: b88d9c898edd5665
+  zh: 0c2770dda705cd78
+/agent-note-searxng-web-search-provider/decision:
+  en: 6c4a23d3ea9d7a75
+  zh: d201dd1be1ed34d1
+/agent-note-searxng-web-search-provider/alternatives-considered:
+  en: 16e537b034d4d28a
+  zh: 4d8106cf7f8481bc
+/agent-note-searxng-web-search-provider/consequences:
+  en: 0ca515909c8443ed
+  zh: fcec37d54f117fc9
+/agent-note-searxng-web-search-provider/testing:
+  en: 56b51f901b419d56
+  zh: c575960c8335bcb4
+/agent-note-searxng-web-search-provider/related:
+  en: 7b12a8027f6bd01a
+  zh: cadf6269f3dc530f
