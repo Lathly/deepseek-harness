@@ -1,6 +1,9 @@
 packages:
   - vendor/*
   - packages/*/*
+  # Personal, out-of-channel plugin: built by tsdown's own packages/*/* glob, ignored by pnpm
+  # so it never enters the lockfile or the frozen-install check. See HANDOFF.
+  - '!packages/client/ui-bailian-quota'
   # The Landlock launcher is developed with its harness consumers but keeps
   # its native build and publication scripts under native/system.
   - native/system
