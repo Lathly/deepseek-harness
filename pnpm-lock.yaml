@@ -11217,6 +11217,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.2.0
         version: 2.2.0
+      undici:
+        specifier: ^8.10.0
+        version: 8.11.2
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -14998,6 +15001,22 @@ importers:
         version: link:../../util/launch-environment
       '@deepseek-ai/dsh-web':
         specifier: workspace:*
+        version: link:../web
+
+  packages/web/web-search-searxng:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-launch-environment':
+        specifier: workspace:^
+        version: link:../../util/launch-environment
+      '@deepseek-ai/dsh-web':
+        specifier: workspace:^
         version: link:../web
 
   packages/workflow/tool-workflow:
